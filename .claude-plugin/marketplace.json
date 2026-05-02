@@ -1,0 +1,26 @@
+{
+  "name": "account-switcher",
+  "owner": {
+    "name": "Jaden Choi",
+    "url": "https://github.com/choism4"
+  },
+  "metadata": {
+    "description": "Claude Code account profile switcher for people who manually use multiple Claude.ai Max accounts.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "account-switcher",
+      "source": "./plugins/account-switcher",
+      "description": "Register local Claude.ai account profiles, inspect the active Claude Code login, and start guided manual account switches.",
+      "category": "productivity",
+      "tags": [
+        "claude-code",
+        "account-switcher",
+        "claude-ai",
+        "max",
+        "profiles"
+      ]
+    }
+  ]
+}

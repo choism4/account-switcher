@@ -1,0 +1,28 @@
+{
+  "name": "account-switcher",
+  "version": "0.1.0",
+  "description": "Manage local Claude Code account profiles and inspect the active Claude.ai login.",
+  "author": {
+    "name": "Jaden Choi",
+    "url": "https://github.com/choism4"
+  },
+  "repository": "https://github.com/choism4/account-switcher",
+  "homepage": "https://github.com/choism4/account-switcher#readme",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "account-switcher",
+    "claude-ai",
+    "max",
+    "profiles"
+  ],
+  "commands": [
+    "./commands/current.md",
+    "./commands/ls.md",
+    "./commands/register.md",
+    "./commands/unregister.md",
+    "./commands/use.md",
+    "./commands/account-switcher.md"
+  ]
+}

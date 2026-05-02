@@ -1,0 +1,19 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check plugin manifest
+        run: |
+          test -f plugins/account-switcher/.claude-plugin/plugin.json
+          jq -e '.name == "account-switcher" and .version == "0.1.0"' plugins/account-switcher/.claude-plugin/plugin.json
+      - name: Check marketplace manifest
+        run: |
+          test -f .claude-plugin/marketplace.json
+          jq -e '.plugins[0].name == "account-switcher"' .claude-plugin/marketplace.json

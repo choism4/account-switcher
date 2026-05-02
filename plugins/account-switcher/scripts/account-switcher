@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_DIR="${HOME}/.claude/account-switcher"
+ACCOUNTS_FILE="${STATE_DIR}/accounts.json"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  /account-switcher current
+  /account-switcher ls
+  /account-switcher register <name> [email_hint]
+  /account-switcher unregister <name>
+  /account-switcher use <name>
+EOF
+}
+
+ensure_state() {
+  mkdir -p "$STATE_DIR"
+  if [[ ! -f "$ACCOUNTS_FILE" ]]; then
+    printf '{"accounts":[]}\n' > "$ACCOUNTS_FILE"
+  fi
+}
+
+current() {
+  claude auth status --json | node -e '
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const status = JSON.parse(input);
+  if (!status.loggedIn) {
+    console.log("Not logged in.");
+    return;
+  }
+  console.log(`Logged in: ${status.email || "(unknown email)"}`);
+  console.log(`Auth method: ${status.authMethod || "(unknown)"}`);
+  console.log(`Provider: ${status.apiProvider || "(unknown)"}`);
+  console.log(`Subscription: ${status.subscriptionType || "(unknown)"}`);
+  if (status.orgName) console.log(`Org: ${status.orgName}`);
+});
+'
+}
+
+current_email() {
+  claude auth status --json | node -e '
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const status = JSON.parse(input);
+  if (status.loggedIn && status.email) process.stdout.write(status.email);
+});
+'
+}
+
+list_accounts() {
+  ensure_state
+  node - "$ACCOUNTS_FILE" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+if (!data.accounts.length) {
+  console.log("No accounts registered.");
+  process.exit(0);
+}
+for (const account of data.accounts) {
+  const hint = account.email_hint ? ` (${account.email_hint})` : "";
+  console.log(`- ${account.name}${hint}`);
+}
+NODE
+}
+
+register_account() {
+  local name="${1:-}"
+  local email_hint="${2:-}"
+  if [[ -z "$name" ]]; then
+    usage
+    exit 2
+  fi
+  if [[ ! "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+    echo "Invalid account name. Use letters, numbers, dots, underscores, or hyphens."
+    exit 2
+  fi
+
+  if [[ -z "$email_hint" ]]; then
+    email_hint="$(current_email || true)"
+  fi
+
+  ensure_state
+  node - "$ACCOUNTS_FILE" "$name" "$email_hint" <<'NODE'
+const fs = require("fs");
+const [file, name, emailHint] = process.argv.slice(2);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+const existing = data.accounts.find(account => account.name === name);
+if (existing) {
+  if (emailHint) existing.email_hint = emailHint;
+  existing.updated_at = new Date().toISOString();
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+  console.log(`Updated account: ${name}`);
+  process.exit(0);
+}
+data.accounts.push({
+  name,
+  email_hint: emailHint || undefined,
+  registered_at: new Date().toISOString()
+});
+fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+console.log(`Registered account: ${name}`);
+NODE
+}
+
+unregister_account() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    usage
+    exit 2
+  fi
+
+  ensure_state
+  node - "$ACCOUNTS_FILE" "$name" <<'NODE'
+const fs = require("fs");
+const [file, name] = process.argv.slice(2);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+const before = data.accounts.length;
+data.accounts = data.accounts.filter(account => account.name !== name);
+fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+if (data.accounts.length === before) {
+  console.log(`No such account: ${name}`);
+} else {
+  console.log(`Unregistered account: ${name}`);
+}
+NODE
+}
+
+use_account() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    usage
+    exit 2
+  fi
+
+  ensure_state
+  node - "$ACCOUNTS_FILE" "$name" "$(current_email || true)" <<'NODE'
+const fs = require("fs");
+const [file, name, currentEmail] = process.argv.slice(2);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+const account = data.accounts.find(item => item.name === name);
+if (!account) {
+  console.log(`No such account: ${name}`);
+  process.exit(2);
+}
+const hint = account.email_hint || "";
+if (hint && currentEmail && hint === currentEmail) {
+  console.log(`Already using ${name} (${hint}).`);
+  process.exit(0);
+}
+console.log(`Switch target: ${name}${hint ? ` (${hint})` : ""}`);
+console.log("");
+console.log("Claude Code does not expose a non-interactive Max account switch command.");
+console.log("Use the guided switch flow:");
+console.log("  claude auth logout");
+console.log(`  claude auth login --claudeai${hint ? ` --email ${JSON.stringify(hint)}` : ""}`);
+console.log("");
+console.log("After browser login finishes, run:");
+console.log("  /account-switcher current");
+NODE
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  current)
+    current
+    ;;
+  ls|list)
+    list_accounts
+    ;;
+  register)
+    register_account "$@"
+    ;;
+  unregister|remove|rm)
+    unregister_account "$@"
+    ;;
+  use|switch)
+    use_account "$@"
+    ;;
+  ""|-h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd"
+    usage
+    exit 2
+    ;;
+esac
