@@ -17,7 +17,7 @@ This plugin intentionally uses macOS Keychain. Linux and Windows are not support
 Add the marketplace:
 
 ```text
-/plugin marketplace add choism4/account-switcher
+/plugin marketplace add choism4/claude-account-switcher
 ```
 
 Install the plugin:
