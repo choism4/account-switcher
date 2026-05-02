@@ -1,7 +1,7 @@
 {
   "name": "account-switcher",
-  "version": "0.2.1",
-  "description": "Switch between saved Claude Code account credentials using macOS Keychain.",
+  "version": "0.2.2",
+  "description": "Switch between saved Claude Code account credentials and OAuth token caches using macOS Keychain.",
   "author": {
     "name": "Jaden Choi",
     "url": "https://github.com/choism4"

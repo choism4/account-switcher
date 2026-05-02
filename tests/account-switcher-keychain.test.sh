@@ -22,6 +22,7 @@ setup_fake_env() {
   export HOME="${TMPDIR}/home"
   export PATH="${TMPDIR}/bin:${PATH}"
   mkdir -p "${HOME}" "${TMPDIR}/bin" "${TMPDIR}/keychain"
+  mkdir -p "${HOME}/Library/Application Support/Claude"
 
   cat > "${TMPDIR}/bin/uname" <<'SH'
 #!/usr/bin/env bash
@@ -100,13 +101,18 @@ test_register_stores_current_claude_credentials_in_account_keychain_item() {
   setup_fake_env
   printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
     > "${TMPDIR}/keychain/Claude Code-credentials"
+  printf '{"oauth:tokenCache":"token-cache-a","locale":"en-US"}\n' \
+    > "${HOME}/Library/Application Support/Claude/config.json"
 
   "${SCRIPT}" register personal-a > "${TMPDIR}/register.out"
 
   assert_file_contains "${TMPDIR}/register.out" "Registered account: personal-a"
   assert_file_contains "${TMPDIR}/security.log" "add Claude Code account-switcher: personal-a"
+  assert_file_contains "${TMPDIR}/security.log" "add Claude Code account-switcher config: personal-a"
   assert_file_contains "${TMPDIR}/keychain/Claude Code account-switcher: personal-a" "access-a"
+  assert_file_contains "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a" "token-cache-a"
   assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"credential_service": "Claude Code account-switcher: personal-a"'
+  assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"config_service": "Claude Code account-switcher config: personal-a"'
   assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"source_service": "Claude Code-credentials"'
   ! grep -Fq '"email_hint"' "${HOME}/.claude/account-switcher/accounts.json" || fail "register should not store email_hint"
 }
@@ -133,6 +139,7 @@ test_use_restores_saved_credentials_to_claude_code_keychain_item() {
       "name": "personal-a",
       "email_hint": "a@example.com",
       "credential_service": "Claude Code account-switcher: personal-a",
+      "config_service": "Claude Code account-switcher config: personal-a",
       "source_service": "Claude Code-credentials",
       "registered_at": "2026-05-02T12:00:00.000Z"
     }
@@ -143,12 +150,18 @@ JSON
     > "${TMPDIR}/keychain/Claude Code account-switcher: personal-a"
   printf '{"claudeAiOauth":{"accessToken":"access-b","refreshToken":"refresh-b","expiresAt":1773980556114}}\n' \
     > "${TMPDIR}/keychain/Claude Code-credentials"
+  printf 'token-cache-a' > "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a"
+  mkdir -p "${HOME}/Library/Application Support/Claude"
+  printf '{"oauth:tokenCache":"token-cache-b","locale":"en-US"}\n' \
+    > "${HOME}/Library/Application Support/Claude/config.json"
 
   "${SCRIPT}" use personal-a > "${TMPDIR}/use.out"
 
   assert_file_contains "${TMPDIR}/use.out" "Switched to account: personal-a"
   assert_file_contains "${TMPDIR}/security.log" "add Claude Code-credentials"
   assert_file_contains "${TMPDIR}/keychain/Claude Code-credentials" "access-a"
+  assert_file_contains "${HOME}/Library/Application Support/Claude/config.json" '"oauth:tokenCache": "token-cache-a"'
+  assert_file_contains "${HOME}/Library/Application Support/Claude/config.json" '"locale": "en-US"'
 }
 
 test_unregister_removes_saved_keychain_item() {
@@ -160,6 +173,7 @@ test_unregister_removes_saved_keychain_item() {
     {
       "name": "personal-a",
       "credential_service": "Claude Code account-switcher: personal-a",
+      "config_service": "Claude Code account-switcher config: personal-a",
       "source_service": "Claude Code-credentials",
       "registered_at": "2026-05-02T12:00:00.000Z"
     }
@@ -168,12 +182,15 @@ test_unregister_removes_saved_keychain_item() {
 JSON
   printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
     > "${TMPDIR}/keychain/Claude Code account-switcher: personal-a"
+  printf 'token-cache-a' > "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a"
 
   "${SCRIPT}" unregister personal-a > "${TMPDIR}/unregister.out"
 
   assert_file_contains "${TMPDIR}/unregister.out" "Unregistered account: personal-a"
   assert_file_contains "${TMPDIR}/security.log" "delete Claude Code account-switcher: personal-a"
+  assert_file_contains "${TMPDIR}/security.log" "delete Claude Code account-switcher config: personal-a"
   [[ ! -f "${TMPDIR}/keychain/Claude Code account-switcher: personal-a" ]] || fail "expected keychain item to be deleted"
+  [[ ! -f "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a" ]] || fail "expected config keychain item to be deleted"
 }
 
 test_user_prompt_hook_handles_use_before_model_invocation() {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Save and restore Claude Code 2.x `oauth:tokenCache` from `~/Library/Application Support/Claude/config.json`.
+- Store each profile's OAuth token cache in a separate macOS Keychain item.
+- Keep the hook script working when Claude Code runs it without `CLAUDE_PLUGIN_ROOT`.
+
 ## 0.2.1
 
 - Add a `UserPromptSubmit` hook so account-switcher commands run before model invocation, including from quota-limited sessions.

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/account-switcher"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${HOOK_DIR}/.." && pwd)}"
+SCRIPT="${PLUGIN_ROOT}/scripts/account-switcher"
 
 json_escape() {
   node -e 'const fs = require("fs"); process.stdout.write(JSON.stringify(fs.readFileSync(0, "utf8")));'

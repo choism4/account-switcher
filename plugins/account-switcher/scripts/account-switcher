@@ -4,7 +4,9 @@ set -euo pipefail
 STATE_DIR="${HOME}/.claude/account-switcher"
 ACCOUNTS_FILE="${STATE_DIR}/accounts.json"
 CRED_FILE="${HOME}/.claude/.credentials.json"
+CLAUDE_CONFIG_FILE="${HOME}/Library/Application Support/Claude/config.json"
 KEYCHAIN_ACCOUNT_PREFIX="Claude Code account-switcher:"
+KEYCHAIN_CONFIG_PREFIX="Claude Code account-switcher config:"
 CLAUDE_KEYCHAIN_SERVICES=(
   "Claude Code-credentials"
   "Claude Code credentials"
@@ -85,6 +87,44 @@ keychain_set() {
 keychain_delete() {
   local service="$1"
   security delete-generic-password -s "$service" >/dev/null 2>&1 || true
+}
+
+read_oauth_token_cache() {
+  if [[ ! -f "$CLAUDE_CONFIG_FILE" ]]; then
+    return 1
+  fi
+
+  node - "$CLAUDE_CONFIG_FILE" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+try {
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  const tokenCache = data["oauth:tokenCache"];
+  if (typeof tokenCache === "string" && tokenCache.length > 0) {
+    process.stdout.write(tokenCache);
+  }
+} catch {
+  process.exit(1);
+}
+NODE
+}
+
+restore_oauth_token_cache() {
+  local token_cache="$1"
+  mkdir -p "$(dirname "$CLAUDE_CONFIG_FILE")"
+  node - "$CLAUDE_CONFIG_FILE" "$token_cache" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const tokenCache = process.argv[3];
+let data = {};
+try {
+  if (fs.existsSync(file)) data = JSON.parse(fs.readFileSync(file, "utf8"));
+} catch {
+  data = {};
+}
+data["oauth:tokenCache"] = tokenCache;
+fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+NODE
 }
 
 read_current_credentials() {
@@ -176,29 +216,41 @@ register_account() {
   fi
 
   local credential_service="${KEYCHAIN_ACCOUNT_PREFIX} ${name}"
+  local config_service="${KEYCHAIN_CONFIG_PREFIX} ${name}"
   keychain_set "$credential_service" "$CREDENTIAL_JSON"
+  local oauth_token_cache
+  oauth_token_cache="$(read_oauth_token_cache || true)"
+  if [[ -n "$oauth_token_cache" ]]; then
+    keychain_set "$config_service" "$oauth_token_cache"
+  else
+    config_service=""
+  fi
 
   ensure_state
-  node - "$ACCOUNTS_FILE" "$name" "$credential_service" "$CREDENTIAL_SOURCE" <<'NODE'
+  node - "$ACCOUNTS_FILE" "$name" "$credential_service" "$CREDENTIAL_SOURCE" "$config_service" <<'NODE'
 const fs = require("fs");
-const [file, name, credentialService, sourceService] = process.argv.slice(2);
+const [file, name, credentialService, sourceService, configService] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
 const existing = data.accounts.find(account => account.name === name);
 if (existing) {
   delete existing.email_hint;
   existing.credential_service = credentialService;
   existing.source_service = sourceService;
+  if (configService) existing.config_service = configService;
+  else delete existing.config_service;
   existing.updated_at = new Date().toISOString();
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
   console.log(`Updated account: ${name}`);
   process.exit(0);
 }
-data.accounts.push({
+const account = {
   name,
   credential_service: credentialService,
   source_service: sourceService,
   registered_at: new Date().toISOString()
-});
+};
+if (configService) account.config_service = configService;
+data.accounts.push(account);
 fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 console.log(`Registered account: ${name}`);
 NODE
@@ -213,14 +265,28 @@ unregister_account() {
 
   ensure_state
   local credential_service
-  credential_service="$(node - "$ACCOUNTS_FILE" "$name" <<'NODE'
+  local config_service
+  local services
+  services="$(node - "$ACCOUNTS_FILE" "$name" <<'NODE'
 const fs = require("fs");
 const [file, name] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
 const account = data.accounts.find(item => item.name === name);
-if (account && account.credential_service) process.stdout.write(account.credential_service);
+if (account) {
+  process.stdout.write(JSON.stringify({
+    credential_service: account.credential_service || "",
+    config_service: account.config_service || ""
+  }));
+}
 NODE
 )"
+  if [[ -n "$services" ]]; then
+    credential_service="$(printf '%s' "$services" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.credential_service);')"
+    config_service="$(printf '%s' "$services" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.config_service);')"
+  else
+    credential_service=""
+    config_service=""
+  fi
 
   node - "$ACCOUNTS_FILE" "$name" <<'NODE'
 const fs = require("fs");
@@ -238,6 +304,9 @@ NODE
 
   if [[ -n "$credential_service" ]] && is_macos; then
     keychain_delete "$credential_service"
+  fi
+  if [[ -n "$config_service" ]] && is_macos; then
+    keychain_delete "$config_service"
   fi
 }
 
@@ -267,7 +336,8 @@ console.log(JSON.stringify({
   name: account.name,
   email_hint: account.email_hint || "",
   credential_service: account.credential_service,
-  source_service: account.source_service || "Claude Code-credentials"
+  source_service: account.source_service || "Claude Code-credentials",
+  config_service: account.config_service || ""
 }));
 NODE
 )"
@@ -275,9 +345,11 @@ NODE
   local credential_service
   local source_service
   local email_hint
+  local config_service
   credential_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.credential_service);')"
   source_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.source_service);')"
   email_hint="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.email_hint);')"
+  config_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.config_service);')"
 
   local credentials
   credentials="$(read_account_credentials "$credential_service")"
@@ -287,6 +359,13 @@ NODE
   fi
 
   restore_current_credentials "$source_service" "$credentials"
+  if [[ -n "$config_service" ]]; then
+    local oauth_token_cache
+    oauth_token_cache="$(keychain_get "$config_service")"
+    if [[ -n "$oauth_token_cache" ]]; then
+      restore_oauth_token_cache "$oauth_token_cache"
+    fi
+  fi
   echo "Switched to account: $name${email_hint:+ ($email_hint)}"
 }
 

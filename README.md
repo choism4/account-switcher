@@ -2,7 +2,7 @@
 
 Switch between multiple Claude.ai accounts in Claude Code without repeating the browser login flow every time.
 
-`account-switcher` snapshots the currently logged-in Claude Code credential into macOS Keychain under a profile name. Later, `use <name>` restores that saved credential back to Claude Code's Keychain item.
+`account-switcher` snapshots the currently logged-in Claude Code credential and OAuth token cache into macOS Keychain under a profile name. Later, `use <name>` restores both pieces back to Claude Code.
 
 ## Requirements
 
@@ -117,19 +117,33 @@ The credential itself is stored in macOS Keychain as a generic password:
 Claude Code account-switcher: personal
 ```
 
+Claude Code 2.x also keeps an OAuth token cache in:
+
+```text
+~/Library/Application Support/Claude/config.json
+```
+
+That `oauth:tokenCache` value is stored in a second Keychain item:
+
+```text
+Claude Code account-switcher config: personal
+```
+
 On switch, that saved credential is written back to the Claude Code Keychain service detected during registration, usually:
 
 ```text
 Claude Code-credentials
 ```
 
+The saved OAuth token cache is also restored to `config.json`. Existing profiles created before `0.2.2` should be registered again while the intended account is active.
+
 ## Manual Fallback
 
 If Claude Code does not reload the plugin command immediately, you can run the script directly:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.1/scripts/account-switcher register personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.1/scripts/account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.2/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.2/scripts/account-switcher use personal
 ```
 
 For a local checkout:
@@ -163,6 +177,12 @@ To verify a profile credential exists:
 
 ```bash
 security find-generic-password -s "Claude Code account-switcher: personal" -w >/dev/null && echo saved
+```
+
+To verify the Claude Code 2.x OAuth token cache exists:
+
+```bash
+security find-generic-password -s "Claude Code account-switcher config: personal" -w >/dev/null && echo saved
 ```
 
 ## Development
