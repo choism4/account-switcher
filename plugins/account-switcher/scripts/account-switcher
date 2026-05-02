@@ -3,13 +3,23 @@ set -euo pipefail
 
 STATE_DIR="${HOME}/.claude/account-switcher"
 ACCOUNTS_FILE="${STATE_DIR}/accounts.json"
+CRED_FILE="${HOME}/.claude/.credentials.json"
+KEYCHAIN_ACCOUNT_PREFIX="Claude Code account-switcher:"
+CLAUDE_KEYCHAIN_SERVICES=(
+  "Claude Code-credentials"
+  "Claude Code credentials"
+  "Claude Code"
+  "claude-code-credentials"
+)
+CREDENTIAL_JSON=""
+CREDENTIAL_SOURCE=""
 
 usage() {
   cat <<'EOF'
 Usage:
   /account-switcher current
   /account-switcher ls
-  /account-switcher register <name> [email_hint]
+  /account-switcher register <name>
   /account-switcher unregister <name>
   /account-switcher use <name>
 EOF
@@ -52,6 +62,74 @@ process.stdin.on("end", () => {
 '
 }
 
+is_macos() {
+  [[ "$(uname -s)" == "Darwin" ]]
+}
+
+keychain_get() {
+  local service="$1"
+  security find-generic-password -s "$service" -w 2>/dev/null || true
+}
+
+keychain_set() {
+  local service="$1"
+  local password="$2"
+  security add-generic-password \
+    -a "${USER:-$(whoami)}" \
+    -s "$service" \
+    -l "$service" \
+    -w "$password" \
+    -U >/dev/null
+}
+
+keychain_delete() {
+  local service="$1"
+  security delete-generic-password -s "$service" >/dev/null 2>&1 || true
+}
+
+read_current_credentials() {
+  CREDENTIAL_JSON=""
+  CREDENTIAL_SOURCE=""
+
+  if is_macos; then
+    local service
+    for service in "${CLAUDE_KEYCHAIN_SERVICES[@]}"; do
+      CREDENTIAL_JSON="$(keychain_get "$service")"
+      if [[ -n "$CREDENTIAL_JSON" ]]; then
+        CREDENTIAL_SOURCE="$service"
+        return 0
+      fi
+    done
+  fi
+
+  if [[ -f "$CRED_FILE" ]]; then
+    CREDENTIAL_JSON="$(<"$CRED_FILE")"
+    CREDENTIAL_SOURCE="file:$CRED_FILE"
+    return 0
+  fi
+
+  return 1
+}
+
+read_account_credentials() {
+  local service="$1"
+  keychain_get "$service"
+}
+
+restore_current_credentials() {
+  local source="$1"
+  local credentials="$2"
+
+  if [[ "$source" == file:* ]]; then
+    local file="${source#file:}"
+    mkdir -p "$(dirname "$file")"
+    printf '%s\n' "$credentials" > "$file"
+    return
+  fi
+
+  keychain_set "$source" "$credentials"
+}
+
 list_accounts() {
   ensure_state
   node - "$ACCOUNTS_FILE" <<'NODE'
@@ -71,8 +149,13 @@ NODE
 
 register_account() {
   local name="${1:-}"
-  local email_hint="${2:-}"
+  local unexpected="${2:-}"
   if [[ -z "$name" ]]; then
+    usage
+    exit 2
+  fi
+  if [[ -n "$unexpected" ]]; then
+    echo "register accepts only <name>."
     usage
     exit 2
   fi
@@ -81,18 +164,30 @@ register_account() {
     exit 2
   fi
 
-  if [[ -z "$email_hint" ]]; then
-    email_hint="$(current_email || true)"
+  if ! is_macos; then
+    echo "Keychain account switching is currently supported only on macOS."
+    exit 1
   fi
 
+  if ! read_current_credentials; then
+    echo "No Claude Code credentials found in macOS Keychain or $CRED_FILE."
+    echo "Make sure Claude Code is installed and you are logged in (run: claude auth status)."
+    exit 1
+  fi
+
+  local credential_service="${KEYCHAIN_ACCOUNT_PREFIX} ${name}"
+  keychain_set "$credential_service" "$CREDENTIAL_JSON"
+
   ensure_state
-  node - "$ACCOUNTS_FILE" "$name" "$email_hint" <<'NODE'
+  node - "$ACCOUNTS_FILE" "$name" "$credential_service" "$CREDENTIAL_SOURCE" <<'NODE'
 const fs = require("fs");
-const [file, name, emailHint] = process.argv.slice(2);
+const [file, name, credentialService, sourceService] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
 const existing = data.accounts.find(account => account.name === name);
 if (existing) {
-  if (emailHint) existing.email_hint = emailHint;
+  delete existing.email_hint;
+  existing.credential_service = credentialService;
+  existing.source_service = sourceService;
   existing.updated_at = new Date().toISOString();
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
   console.log(`Updated account: ${name}`);
@@ -100,7 +195,8 @@ if (existing) {
 }
 data.accounts.push({
   name,
-  email_hint: emailHint || undefined,
+  credential_service: credentialService,
+  source_service: sourceService,
   registered_at: new Date().toISOString()
 });
 fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
@@ -116,6 +212,16 @@ unregister_account() {
   fi
 
   ensure_state
+  local credential_service
+  credential_service="$(node - "$ACCOUNTS_FILE" "$name" <<'NODE'
+const fs = require("fs");
+const [file, name] = process.argv.slice(2);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+const account = data.accounts.find(item => item.name === name);
+if (account && account.credential_service) process.stdout.write(account.credential_service);
+NODE
+)"
+
   node - "$ACCOUNTS_FILE" "$name" <<'NODE'
 const fs = require("fs");
 const [file, name] = process.argv.slice(2);
@@ -129,6 +235,10 @@ if (data.accounts.length === before) {
   console.log(`Unregistered account: ${name}`);
 }
 NODE
+
+  if [[ -n "$credential_service" ]] && is_macos; then
+    keychain_delete "$credential_service"
+  fi
 }
 
 use_account() {
@@ -139,30 +249,45 @@ use_account() {
   fi
 
   ensure_state
-  node - "$ACCOUNTS_FILE" "$name" "$(current_email || true)" <<'NODE'
+  local account_info
+  account_info="$(node - "$ACCOUNTS_FILE" "$name" <<'NODE'
 const fs = require("fs");
-const [file, name, currentEmail] = process.argv.slice(2);
+const [file, name] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
 const account = data.accounts.find(item => item.name === name);
 if (!account) {
   console.log(`No such account: ${name}`);
   process.exit(2);
 }
-const hint = account.email_hint || "";
-if (hint && currentEmail && hint === currentEmail) {
-  console.log(`Already using ${name} (${hint}).`);
-  process.exit(0);
+if (!account.credential_service) {
+  console.log(`Account has no saved credentials: ${name}`);
+  process.exit(2);
 }
-console.log(`Switch target: ${name}${hint ? ` (${hint})` : ""}`);
-console.log("");
-console.log("Claude Code does not expose a non-interactive Max account switch command.");
-console.log("Use the guided switch flow:");
-console.log("  claude auth logout");
-console.log(`  claude auth login --claudeai${hint ? ` --email ${JSON.stringify(hint)}` : ""}`);
-console.log("");
-console.log("After browser login finishes, run:");
-console.log("  /account-switcher current");
+console.log(JSON.stringify({
+  name: account.name,
+  email_hint: account.email_hint || "",
+  credential_service: account.credential_service,
+  source_service: account.source_service || "Claude Code-credentials"
+}));
 NODE
+)"
+
+  local credential_service
+  local source_service
+  local email_hint
+  credential_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.credential_service);')"
+  source_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.source_service);')"
+  email_hint="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.email_hint);')"
+
+  local credentials
+  credentials="$(read_account_credentials "$credential_service")"
+  if [[ -z "$credentials" ]]; then
+    echo "No saved credentials found in macOS Keychain for account: $name"
+    exit 1
+  fi
+
+  restore_current_credentials "$source_service" "$credentials"
+  echo "Switched to account: $name${email_hint:+ ($email_hint)}"
 }
 
 cmd="${1:-}"

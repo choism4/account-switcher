@@ -1,7 +1,7 @@
 {
   "name": "account-switcher",
-  "version": "0.1.0",
-  "description": "Manage local Claude Code account profiles and inspect the active Claude.ai login.",
+  "version": "0.2.0",
+  "description": "Switch between saved Claude Code account credentials using macOS Keychain.",
   "author": {
     "name": "Jaden Choi",
     "url": "https://github.com/choism4"

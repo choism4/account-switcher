@@ -1,26 +1,16 @@
 # account-switcher
 
-Claude Code plugin for people who manually use more than one Claude.ai account.
+Switch between multiple Claude.ai accounts in Claude Code without repeating the browser login flow every time.
 
-`account-switcher` does not rotate accounts automatically and does not touch OAuth tokens or the macOS Keychain. It keeps local profile labels, shows the active Claude Code login, and gives a guided manual switch flow using Claude Code's official auth commands.
+`account-switcher` snapshots the currently logged-in Claude Code credential into macOS Keychain under a profile name. Later, `use <name>` restores that saved credential back to Claude Code's Keychain item.
 
-## Commands
+## Requirements
 
-```text
-/account-switcher:current
-/account-switcher:ls
-/account-switcher:register personal-a
-/account-switcher:register personal-b b@example.com
-/account-switcher:use personal-b
-/account-switcher:unregister personal-b
-```
+- macOS
+- Claude Code installed and logged in
+- Claude Code plugin support
 
-The plugin also includes a compatibility command:
-
-```text
-/account-switcher:account-switcher current
-/account-switcher:account-switcher ls
-```
+This plugin intentionally uses macOS Keychain. Linux and Windows are not supported for credential switching yet.
 
 ## Install
 
@@ -36,15 +26,71 @@ Install the plugin:
 /plugin install account-switcher
 ```
 
-Reload plugins if Claude Code asks you to:
+Reload or restart Claude Code if prompted:
 
 ```text
 /reload-plugins
 ```
 
-## What It Stores
+## Usage
 
-Profiles are stored locally at:
+Register the account currently logged in to Claude Code:
+
+```text
+/account-switcher:register personal
+```
+
+Log in to another Claude.ai account using Claude Code's normal login flow, then register it:
+
+```text
+/account-switcher:register work
+```
+
+List saved profiles:
+
+```text
+/account-switcher:ls
+```
+
+Switch profiles:
+
+```text
+/account-switcher:use personal
+```
+
+Check the active Claude Code account:
+
+```text
+/account-switcher:current
+```
+
+Remove a saved profile:
+
+```text
+/account-switcher:unregister work
+```
+
+## Commands
+
+```text
+/account-switcher:current
+/account-switcher:ls
+/account-switcher:register <name>
+/account-switcher:use <name>
+/account-switcher:unregister <name>
+```
+
+There is also a compatibility command:
+
+```text
+/account-switcher:account-switcher current
+/account-switcher:account-switcher ls
+/account-switcher:account-switcher register personal
+```
+
+## What Gets Stored
+
+Profile metadata is stored locally:
 
 ```text
 ~/.claude/account-switcher/accounts.json
@@ -56,25 +102,64 @@ Example:
 {
   "accounts": [
     {
-      "name": "personal-a",
-      "email_hint": "a@example.com",
+      "name": "personal",
+      "credential_service": "Claude Code account-switcher: personal",
+      "source_service": "Claude Code-credentials",
       "registered_at": "2026-05-02T12:00:00.000Z"
     }
   ]
 }
 ```
 
-It does not store passwords, session cookies, OAuth tokens, API keys, or Keychain entries.
+The credential itself is stored in macOS Keychain as a generic password:
 
-## Current Behavior
-
-`/account-switcher:current` runs:
-
-```bash
-claude auth status --json
+```text
+Claude Code account-switcher: personal
 ```
 
-Claude Code currently exposes `login`, `logout`, and `status`, but not a non-interactive command for switching between Claude.ai Max accounts. For that reason, `/account-switcher:use <name>` starts a guided switch rather than modifying credentials directly.
+On switch, that saved credential is written back to the Claude Code Keychain service detected during registration, usually:
+
+```text
+Claude Code-credentials
+```
+
+## Manual Fallback
+
+If Claude Code does not reload the plugin command immediately, you can run the script directly:
+
+```bash
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.0/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.0/scripts/account-switcher use personal
+```
+
+For a local checkout:
+
+```bash
+plugins/account-switcher/scripts/account-switcher register personal
+plugins/account-switcher/scripts/account-switcher use personal
+```
+
+## Troubleshooting
+
+If a command hangs at `Booping...`, restart Claude Code. Some Claude Code versions keep slash command definitions in memory even after `/reload-plugins`.
+
+If Keychain access fails, open Keychain Access and search for:
+
+```text
+Claude Code-credentials
+```
+
+Claude Code must already be logged in before registering a profile:
+
+```bash
+claude auth status
+```
+
+To verify a profile credential exists:
+
+```bash
+security find-generic-password -s "Claude Code account-switcher: personal" -w >/dev/null && echo saved
+```
 
 ## Development
 
@@ -84,11 +169,8 @@ Validate the plugin:
 claude plugin validate plugins/account-switcher
 ```
 
-Test with cmux's Claude wrapper:
+Run the shell tests:
 
 ```bash
-/Applications/cmux.app/Contents/Resources/bin/claude \
-  --plugin-dir plugins/account-switcher \
-  -p '/account-switcher:current' \
-  --output-format text
+bash tests/account-switcher-keychain.test.sh
 ```

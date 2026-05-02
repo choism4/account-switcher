@@ -5,14 +5,14 @@
     "url": "https://github.com/choism4"
   },
   "metadata": {
-    "description": "Claude Code account profile switcher for people who manually use multiple Claude.ai Max accounts.",
-    "version": "0.1.0"
+    "description": "Claude Code account switcher backed by macOS Keychain.",
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "account-switcher",
       "source": "./plugins/account-switcher",
-      "description": "Register local Claude.ai account profiles, inspect the active Claude Code login, and start guided manual account switches.",
+      "description": "Register and switch Claude Code account credentials through macOS Keychain.",
       "category": "productivity",
       "tags": [
         "claude-code",
