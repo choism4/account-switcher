@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Fix GitHub Actions validation so plugin version bumps pass when the plugin and marketplace versions match.
+
 ## 0.2.2
 
 - Save and restore Claude Code 2.x `oauth:tokenCache` from `~/Library/Application Support/Claude/config.json`.
