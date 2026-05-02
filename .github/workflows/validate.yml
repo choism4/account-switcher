@@ -12,8 +12,9 @@ jobs:
       - name: Check plugin manifest
         run: |
           test -f plugins/account-switcher/.claude-plugin/plugin.json
-          jq -e '.name == "account-switcher" and .version == "0.1.0"' plugins/account-switcher/.claude-plugin/plugin.json
+          jq -e '.name == "account-switcher" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' plugins/account-switcher/.claude-plugin/plugin.json
       - name: Check marketplace manifest
         run: |
           test -f .claude-plugin/marketplace.json
           jq -e '.plugins[0].name == "account-switcher"' .claude-plugin/marketplace.json
+          test "$(jq -r '.version' plugins/account-switcher/.claude-plugin/plugin.json)" = "$(jq -r '.metadata.version' .claude-plugin/marketplace.json)"
