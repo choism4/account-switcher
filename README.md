@@ -128,8 +128,8 @@ Claude Code-credentials
 If Claude Code does not reload the plugin command immediately, you can run the script directly:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.0/scripts/account-switcher register personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.0/scripts/account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.1/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.1/scripts/account-switcher use personal
 ```
 
 For a local checkout:
@@ -141,7 +141,11 @@ plugins/account-switcher/scripts/account-switcher use personal
 
 ## Troubleshooting
 
-If a command hangs at `Booping...`, restart Claude Code. Some Claude Code versions keep slash command definitions in memory even after `/reload-plugins`.
+`account-switcher` includes a `UserPromptSubmit` hook that handles `/account-switcher:*` commands locally before model invocation. This lets account switching work even when the current Claude Code account is quota-limited.
+
+If you still see a usage-limit message before the command runs, restart Claude Code so the hook registration is loaded.
+
+If a command hangs at `Booping...`, restart Claude Code. Some Claude Code versions keep slash command definitions and hooks in memory even after `/reload-plugins`.
 
 If Keychain access fails, open Keychain Access and search for:
 

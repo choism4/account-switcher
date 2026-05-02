@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${ROOT}/plugins/account-switcher/scripts/account-switcher"
+HOOK="${ROOT}/plugins/account-switcher/hooks/user-prompt-submit.sh"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -175,9 +176,39 @@ JSON
   [[ ! -f "${TMPDIR}/keychain/Claude Code account-switcher: personal-a" ]] || fail "expected keychain item to be deleted"
 }
 
+test_user_prompt_hook_handles_use_before_model_invocation() {
+  setup_fake_env
+  export CLAUDE_PLUGIN_ROOT="${ROOT}/plugins/account-switcher"
+  mkdir -p "${HOME}/.claude/account-switcher"
+  cat > "${HOME}/.claude/account-switcher/accounts.json" <<'JSON'
+{
+  "accounts": [
+    {
+      "name": "personal-a",
+      "credential_service": "Claude Code account-switcher: personal-a",
+      "source_service": "Claude Code-credentials",
+      "registered_at": "2026-05-02T12:00:00.000Z"
+    }
+  ]
+}
+JSON
+  printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
+    > "${TMPDIR}/keychain/Claude Code account-switcher: personal-a"
+  printf '{"claudeAiOauth":{"accessToken":"access-b","refreshToken":"refresh-b","expiresAt":1773980556114}}\n' \
+    > "${TMPDIR}/keychain/Claude Code-credentials"
+
+  printf '{"hook_event_name":"UserPromptSubmit","user_prompt":"/account-switcher:use personal-a"}' \
+    | "${HOOK}" > "${TMPDIR}/hook.out"
+
+  assert_file_contains "${TMPDIR}/hook.out" '"continue":false'
+  assert_file_contains "${TMPDIR}/hook.out" "Switched to account: personal-a"
+  assert_file_contains "${TMPDIR}/keychain/Claude Code-credentials" "access-a"
+}
+
 test_register_stores_current_claude_credentials_in_account_keychain_item
 test_register_rejects_email_hint_argument
 test_use_restores_saved_credentials_to_claude_code_keychain_item
 test_unregister_removes_saved_keychain_item
+test_user_prompt_hook_handles_use_before_model_invocation
 
 echo "account-switcher keychain tests passed"

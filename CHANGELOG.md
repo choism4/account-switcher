@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Add a `UserPromptSubmit` hook so account-switcher commands run before model invocation, including from quota-limited sessions.
+
 ## 0.2.0
 
 - Add macOS Keychain-backed credential save and restore for registered accounts.
