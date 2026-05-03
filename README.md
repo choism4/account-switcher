@@ -139,11 +139,28 @@ The saved OAuth token cache is also restored to `config.json`. Existing profiles
 
 ## Manual Fallback
 
-If Claude Code does not reload the plugin command immediately, you can run the script directly:
+Claude Code slash commands still go through Claude Code's command pipeline. If auth is invalid, token state is mismatched, or Claude Code refuses to process prompts, use the terminal CLI path instead of `/account-switcher:*`.
+
+For convenience, you can symlink the latest cached script:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.6/scripts/account-switcher register personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.6/scripts/account-switcher use personal
+mkdir -p ~/.local/bin
+ln -sf ~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher ~/.local/bin/account-switcher
+```
+
+Then run:
+
+```bash
+account-switcher ls
+account-switcher use personal
+account-switcher register personal
+```
+
+You can also run the script directly:
+
+```bash
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher use personal
 ```
 
 Do not run older cached versions such as `0.1.0` or `0.2.0`. Those versions do not restore Claude Code 2.x's OAuth token cache and can leave Claude Code with mismatched credentials, which may show up as `Please run /login` or an API 401.
@@ -175,10 +192,11 @@ Claude Code must already be logged in before registering a profile:
 claude auth status
 ```
 
-If you accidentally ran an older cached script and see `API Error: 401`, restore the profile again with the latest cached script:
+If you accidentally ran an older cached script and see `API Error: 401`, restore the profile again with the latest cached script or symlink:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.6/scripts/account-switcher use personal
+account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher use personal
 claude auth status --json
 ```
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7
+
+- Use an explicit wildcard matcher for the account-switcher prompt hook.
+- Document terminal CLI recovery for invalid-auth and 401 states where Claude Code slash commands cannot run.
+
 ## 0.2.6
 
 - Warn when using legacy profiles that were registered before identity verification existed.
