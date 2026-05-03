@@ -142,8 +142,8 @@ The saved OAuth token cache is also restored to `config.json`. Existing profiles
 If Claude Code does not reload the plugin command immediately, you can run the script directly:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.3/scripts/account-switcher register personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.3/scripts/account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.4/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.4/scripts/account-switcher use personal
 ```
 
 For a local checkout:

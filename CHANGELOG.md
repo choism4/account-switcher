@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Handle expanded account-switcher slash commands in the `UserPromptSubmit` hook so register/use/list commands still run before model invocation.
+
 ## 0.2.3
 
 - Fix GitHub Actions validation so plugin version bumps pass when the plugin and marketplace versions match.

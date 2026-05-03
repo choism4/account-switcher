@@ -67,7 +67,12 @@ case "$prompt" in
     fi
     ;;
   *)
-    exit 0
+    if [[ "$prompt" =~ scripts/account-switcher[[:space:]]+(current|ls|list|register|use|switch|unregister|remove|rm)([[:space:]]+\"?([a-zA-Z0-9][a-zA-Z0-9._-]*)\"?)? ]]; then
+      command="${BASH_REMATCH[1]}"
+      args="${BASH_REMATCH[3]:-}"
+    else
+      exit 0
+    fi
     ;;
 esac
 

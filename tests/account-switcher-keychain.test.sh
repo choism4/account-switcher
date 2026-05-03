@@ -222,10 +222,33 @@ JSON
   assert_file_contains "${TMPDIR}/keychain/Claude Code-credentials" "access-a"
 }
 
+test_user_prompt_hook_handles_expanded_register_command_before_model_invocation() {
+  setup_fake_env
+  unset CLAUDE_PLUGIN_ROOT || true
+  hook_dir="${TMPDIR}/installed/hooks"
+  mkdir -p "${hook_dir}" "${TMPDIR}/installed/scripts"
+  cp "${HOOK}" "${hook_dir}/user-prompt-submit.sh"
+  cp "${SCRIPT}" "${TMPDIR}/installed/scripts/account-switcher"
+  chmod +x "${hook_dir}/user-prompt-submit.sh" "${TMPDIR}/installed/scripts/account-switcher"
+  printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
+    > "${TMPDIR}/keychain/Claude Code-credentials"
+  printf '{"oauth:tokenCache":"token-cache-a"}\n' \
+    > "${HOME}/Library/Application Support/Claude/config.json"
+
+  printf '{"hook_event_name":"UserPromptSubmit","user_prompt":"!`%s/scripts/account-switcher register \\\"personal-a\\\"`"}' "${TMPDIR}/installed" \
+    | "${hook_dir}/user-prompt-submit.sh" > "${TMPDIR}/hook-expanded.out"
+
+  assert_file_contains "${TMPDIR}/hook-expanded.out" '"continue":false'
+  assert_file_contains "${TMPDIR}/hook-expanded.out" "Registered account: personal-a"
+  assert_file_contains "${TMPDIR}/keychain/Claude Code account-switcher: personal-a" "access-a"
+  assert_file_contains "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a" "token-cache-a"
+}
+
 test_register_stores_current_claude_credentials_in_account_keychain_item
 test_register_rejects_email_hint_argument
 test_use_restores_saved_credentials_to_claude_code_keychain_item
 test_unregister_removes_saved_keychain_item
 test_user_prompt_hook_handles_use_before_model_invocation
+test_user_prompt_hook_handles_expanded_register_command_before_model_invocation
 
 echo "account-switcher keychain tests passed"
