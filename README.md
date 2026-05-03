@@ -146,6 +146,8 @@ If Claude Code does not reload the plugin command immediately, you can run the s
 ~/.claude/plugins/cache/account-switcher/account-switcher/0.2.4/scripts/account-switcher use personal
 ```
 
+Do not run older cached versions such as `0.1.0` or `0.2.0`. Those versions do not restore Claude Code 2.x's OAuth token cache and can leave Claude Code with mismatched credentials, which may show up as `Please run /login` or an API 401.
+
 For a local checkout:
 
 ```bash
@@ -171,6 +173,13 @@ Claude Code must already be logged in before registering a profile:
 
 ```bash
 claude auth status
+```
+
+If you accidentally ran an older cached script and see `API Error: 401`, restore the profile again with the latest cached script:
+
+```bash
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.4/scripts/account-switcher use personal
+claude auth status --json
 ```
 
 To verify a profile credential exists:
