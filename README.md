@@ -58,6 +58,12 @@ Switch profiles:
 /account-switcher:use personal
 ```
 
+Run an empirical smoke test after switching:
+
+```text
+/account-switcher:smoke personal
+```
+
 Check the active Claude Code account:
 
 ```text
@@ -77,6 +83,7 @@ Remove a saved profile:
 /account-switcher:ls
 /account-switcher:register <name>
 /account-switcher:use <name>
+/account-switcher:smoke [name]
 /account-switcher:unregister <name>
 ```
 
@@ -145,7 +152,7 @@ For convenience, you can symlink the latest cached script:
 
 ```bash
 mkdir -p ~/.local/bin
-ln -sf ~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher ~/.local/bin/account-switcher
+ln -sf ~/.claude/plugins/cache/account-switcher/account-switcher/0.2.8/scripts/account-switcher ~/.local/bin/account-switcher
 ```
 
 Then run:
@@ -154,13 +161,14 @@ Then run:
 account-switcher ls
 account-switcher use personal
 account-switcher register personal
+account-switcher smoke personal
 ```
 
 You can also run the script directly:
 
 ```bash
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher register personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.8/scripts/account-switcher register personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.8/scripts/account-switcher use personal
 ```
 
 Do not run older cached versions such as `0.1.0` or `0.2.0`. Those versions do not restore Claude Code 2.x's OAuth token cache and can leave Claude Code with mismatched credentials, which may show up as `Please run /login` or an API 401.
@@ -171,6 +179,24 @@ For a local checkout:
 plugins/account-switcher/scripts/account-switcher register personal
 plugins/account-switcher/scripts/account-switcher use personal
 ```
+
+## Smoke Test
+
+Checking that a Keychain item exists is not enough. A profile can be saved locally while the restored Claude token is expired, revoked, or mismatched with Claude Code's OAuth cache.
+
+Use `smoke` to switch a profile and make a real Claude Code prompt call:
+
+```bash
+account-switcher smoke personal
+```
+
+To test every registered profile:
+
+```bash
+account-switcher smoke
+```
+
+The command prints `PASS <name>` only when Claude Code successfully answers after the switch. It prints `FAIL <name>` with the Claude CLI error, such as `API Error: 401`, when the saved profile is not actually usable. This uses a minimal real prompt, so it may consume a small amount of usage.
 
 ## Troubleshooting
 
@@ -196,7 +222,7 @@ If you accidentally ran an older cached script and see `API Error: 401`, restore
 
 ```bash
 account-switcher use personal
-~/.claude/plugins/cache/account-switcher/account-switcher/0.2.7/scripts/account-switcher use personal
+~/.claude/plugins/cache/account-switcher/account-switcher/0.2.8/scripts/account-switcher use personal
 claude auth status --json
 ```
 

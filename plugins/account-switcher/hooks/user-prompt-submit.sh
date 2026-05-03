@@ -41,6 +41,13 @@ case "$prompt" in
     command="use"
     args="${prompt#/account-switcher:use }"
     ;;
+  /account-switcher:smoke)
+    command="smoke"
+    ;;
+  /account-switcher:smoke\ *)
+    command="smoke"
+    args="${prompt#/account-switcher:smoke }"
+    ;;
   /account-switcher:switch\ *)
     command="use"
     args="${prompt#/account-switcher:switch }"
@@ -67,7 +74,7 @@ case "$prompt" in
     fi
     ;;
   *)
-    if [[ "$prompt" =~ scripts/account-switcher[[:space:]]+(current|ls|list|register|use|switch|unregister|remove|rm)([[:space:]]+\"?([a-zA-Z0-9][a-zA-Z0-9._-]*)\"?)? ]]; then
+    if [[ "$prompt" =~ scripts/account-switcher[[:space:]]+(current|ls|list|register|use|switch|smoke|unregister|remove|rm)([[:space:]]+\"?([a-zA-Z0-9][a-zA-Z0-9._-]*)\"?)? ]]; then
       command="${BASH_REMATCH[1]}"
       args="${BASH_REMATCH[3]:-}"
     else
@@ -77,7 +84,7 @@ case "$prompt" in
 esac
 
 case "$command" in
-  current|ls|list|register|use|switch|unregister|remove|rm)
+  current|ls|list|register|use|switch|smoke|unregister|remove|rm)
     ;;
   *)
     exit 0

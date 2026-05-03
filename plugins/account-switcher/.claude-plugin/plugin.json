@@ -1,6 +1,6 @@
 {
   "name": "account-switcher",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Switch between saved Claude Code account credentials and OAuth token caches using macOS Keychain.",
   "author": {
     "name": "Jaden Choi",
@@ -23,6 +23,7 @@
     "./commands/register.md",
     "./commands/unregister.md",
     "./commands/use.md",
+    "./commands/smoke.md",
     "./commands/account-switcher.md"
   ]
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8
+
+- Add `smoke [name]` to switch profiles and verify each one with a real `claude -p` prompt.
+- Document empirical profile verification instead of relying only on Keychain existence checks.
+
 ## 0.2.7
 
 - Use an explicit wildcard matcher for the account-switcher prompt hook.

@@ -1,6 +1,6 @@
 ---
 description: "Manage Claude Code account profiles"
-argument-hint: "current | ls | register <name> | unregister <name> | use <name>"
+argument-hint: "current | ls | register <name> | unregister <name> | use <name> | smoke [name]"
 disable-model-invocation: true
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/account-switcher:*)
 ---

@@ -24,6 +24,7 @@ Usage:
   /account-switcher register <name>
   /account-switcher unregister <name>
   /account-switcher use <name>
+  /account-switcher smoke [name]
 EOF
 }
 
@@ -413,6 +414,90 @@ NODE
   fi
 }
 
+smoke_accounts() {
+  local target="${1:-}"
+  local unexpected="${2:-}"
+  if [[ -n "$unexpected" ]]; then
+    echo "smoke accepts at most one account name."
+    usage
+    exit 2
+  fi
+
+  ensure_state
+  local names
+  local names_status
+  set +e
+  names="$(node - "$ACCOUNTS_FILE" "$target" <<'NODE'
+const fs = require("fs");
+const [file, target] = process.argv.slice(2);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+if (target) {
+  if (!accounts.some(account => account.name === target)) {
+    console.log(`No such account: ${target}`);
+    process.exit(2);
+  }
+  console.log(target);
+  process.exit(0);
+}
+if (!accounts.length) {
+  console.log("No accounts registered.");
+  process.exit(2);
+}
+for (const account of accounts) {
+  if (account.name) console.log(account.name);
+}
+NODE
+)"
+  names_status=$?
+  set -e
+  if [[ "$names_status" -ne 0 ]]; then
+    printf '%s\n' "$names"
+    exit "$names_status"
+  fi
+
+  local failures=0
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    printf '==> %s\n' "$name"
+
+    local switch_output
+    local switch_status
+    set +e
+    switch_output="$(use_account "$name" 2>&1)"
+    switch_status=$?
+    set -e
+    printf '%s\n' "$switch_output"
+    if [[ "$switch_status" -ne 0 ]]; then
+      printf 'FAIL %s: switch failed\n' "$name"
+      failures=$((failures + 1))
+      continue
+    fi
+
+    local probe_output
+    local probe_status
+    set +e
+    probe_output="$(claude -p 'account-switcher smoke test: respond with exactly OK' --output-format text 2>&1)"
+    probe_status=$?
+    set -e
+    if [[ "$probe_status" -eq 0 ]]; then
+      printf 'PASS %s\n' "$name"
+      if [[ -n "$probe_output" ]]; then
+        printf 'Claude response: %s\n' "$(printf '%s' "$probe_output" | head -n 1)"
+      fi
+    else
+      printf 'FAIL %s: Claude prompt failed\n' "$name"
+      printf '%s\n' "$probe_output"
+      failures=$((failures + 1))
+    fi
+  done <<< "$names"
+
+  if [[ "$failures" -ne 0 ]]; then
+    exit 1
+  fi
+}
+
 cmd="${1:-}"
 shift || true
 
@@ -431,6 +516,9 @@ case "$cmd" in
     ;;
   use|switch)
     use_account "$@"
+    ;;
+  smoke)
+    smoke_accounts "$@"
     ;;
   ""|-h|--help|help)
     usage
