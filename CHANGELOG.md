@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.6
+
+- Warn when using legacy profiles that were registered before identity verification existed.
+
+## 0.2.5
+
+- Store the active Claude account identity at registration time.
+- Warn after switching if Claude Code reports a different account than the profile was registered with.
+
 ## 0.2.4
 
 - Handle expanded account-switcher slash commands in the `UserPromptSubmit` hook so register/use/list commands still run before model invocation.

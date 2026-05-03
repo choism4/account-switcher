@@ -64,6 +64,25 @@ process.stdin.on("end", () => {
 '
 }
 
+current_identity_json() {
+  claude auth status --json 2>/dev/null | node -e '
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  try {
+    const status = JSON.parse(input);
+    const identity = {};
+    if (status.loggedIn && status.email) identity.email = status.email;
+    if (status.loggedIn && status.orgId) identity.orgId = status.orgId;
+    if (status.loggedIn && status.orgName) identity.orgName = status.orgName;
+    process.stdout.write(JSON.stringify(identity));
+  } catch {
+    process.stdout.write("{}");
+  }
+});
+'
+}
+
 is_macos() {
   [[ "$(uname -s)" == "Darwin" ]]
 }
@@ -225,12 +244,20 @@ register_account() {
   else
     config_service=""
   fi
+  local identity_json
+  identity_json="$(current_identity_json || printf '{}')"
 
   ensure_state
-  node - "$ACCOUNTS_FILE" "$name" "$credential_service" "$CREDENTIAL_SOURCE" "$config_service" <<'NODE'
+  node - "$ACCOUNTS_FILE" "$name" "$credential_service" "$CREDENTIAL_SOURCE" "$config_service" "$identity_json" <<'NODE'
 const fs = require("fs");
-const [file, name, credentialService, sourceService, configService] = process.argv.slice(2);
+const [file, name, credentialService, sourceService, configService, identityJson] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
+let identity = {};
+try {
+  identity = JSON.parse(identityJson);
+} catch {
+  identity = {};
+}
 const existing = data.accounts.find(account => account.name === name);
 if (existing) {
   delete existing.email_hint;
@@ -238,6 +265,8 @@ if (existing) {
   existing.source_service = sourceService;
   if (configService) existing.config_service = configService;
   else delete existing.config_service;
+  if (identity.email || identity.orgId || identity.orgName) existing.identity = identity;
+  else delete existing.identity;
   existing.updated_at = new Date().toISOString();
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
   console.log(`Updated account: ${name}`);
@@ -250,6 +279,7 @@ const account = {
   registered_at: new Date().toISOString()
 };
 if (configService) account.config_service = configService;
+if (identity.email || identity.orgId || identity.orgName) account.identity = identity;
 data.accounts.push(account);
 fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 console.log(`Registered account: ${name}`);
@@ -337,7 +367,8 @@ console.log(JSON.stringify({
   email_hint: account.email_hint || "",
   credential_service: account.credential_service,
   source_service: account.source_service || "Claude Code-credentials",
-  config_service: account.config_service || ""
+  config_service: account.config_service || "",
+  identity: account.identity || {}
 }));
 NODE
 )"
@@ -346,10 +377,12 @@ NODE
   local source_service
   local email_hint
   local config_service
+  local expected_email
   credential_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.credential_service);')"
   source_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.source_service);')"
   email_hint="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.email_hint);')"
   config_service="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.config_service);')"
+  expected_email="$(printf '%s' "$account_info" | node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(data.identity?.email || "");')"
 
   local credentials
   credentials="$(read_account_credentials "$credential_service")"
@@ -367,6 +400,17 @@ NODE
     fi
   fi
   echo "Switched to account: $name${email_hint:+ ($email_hint)}"
+  if [[ -n "$expected_email" ]]; then
+    local actual_email
+    actual_email="$(current_email || true)"
+    if [[ -n "$actual_email" && "$actual_email" != "$expected_email" ]]; then
+      echo "Warning: active Claude account is $actual_email, but $name was registered as $expected_email."
+      echo "Run /login for the intended account, then re-register with: /account-switcher:register $name"
+    fi
+  else
+    echo "Warning: $name was registered before account identity verification was available."
+    echo "Run /login for the intended account, then re-register with: /account-switcher:register $name"
+  fi
 }
 
 cmd="${1:-}"

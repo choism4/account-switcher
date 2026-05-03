@@ -114,6 +114,7 @@ test_register_stores_current_claude_credentials_in_account_keychain_item() {
   assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"credential_service": "Claude Code account-switcher: personal-a"'
   assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"config_service": "Claude Code account-switcher config: personal-a"'
   assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"source_service": "Claude Code-credentials"'
+  assert_file_contains "${HOME}/.claude/account-switcher/accounts.json" '"email": "a@example.com"'
   ! grep -Fq '"email_hint"' "${HOME}/.claude/account-switcher/accounts.json" || fail "register should not store email_hint"
 }
 
@@ -162,6 +163,71 @@ JSON
   assert_file_contains "${TMPDIR}/keychain/Claude Code-credentials" "access-a"
   assert_file_contains "${HOME}/Library/Application Support/Claude/config.json" '"oauth:tokenCache": "token-cache-a"'
   assert_file_contains "${HOME}/Library/Application Support/Claude/config.json" '"locale": "en-US"'
+}
+
+test_use_warns_when_restored_account_does_not_match_registered_identity() {
+  setup_fake_env
+  cat > "${TMPDIR}/bin/claude" <<'SH'
+#!/usr/bin/env bash
+if [[ "$*" == "auth status --json" ]]; then
+  printf '{"loggedIn":true,"email":"wrong@example.com","authMethod":"claude.ai","apiProvider":"anthropic"}\n'
+  exit 0
+fi
+exit 1
+SH
+  chmod +x "${TMPDIR}/bin/claude"
+  mkdir -p "${HOME}/.claude/account-switcher"
+  cat > "${HOME}/.claude/account-switcher/accounts.json" <<'JSON'
+{
+  "accounts": [
+    {
+      "name": "personal-a",
+      "credential_service": "Claude Code account-switcher: personal-a",
+      "config_service": "Claude Code account-switcher config: personal-a",
+      "source_service": "Claude Code-credentials",
+      "identity": {
+        "email": "a@example.com",
+        "orgId": "org-a"
+      },
+      "registered_at": "2026-05-02T12:00:00.000Z"
+    }
+  ]
+}
+JSON
+  printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
+    > "${TMPDIR}/keychain/Claude Code account-switcher: personal-a"
+  printf 'token-cache-a' > "${TMPDIR}/keychain/Claude Code account-switcher config: personal-a"
+
+  "${SCRIPT}" use personal-a > "${TMPDIR}/use-mismatch.out"
+
+  assert_file_contains "${TMPDIR}/use-mismatch.out" "Switched to account: personal-a"
+  assert_file_contains "${TMPDIR}/use-mismatch.out" "Warning: active Claude account is wrong@example.com, but personal-a was registered as a@example.com."
+}
+
+test_use_warns_when_profile_has_no_registered_identity() {
+  setup_fake_env
+  mkdir -p "${HOME}/.claude/account-switcher"
+  cat > "${HOME}/.claude/account-switcher/accounts.json" <<'JSON'
+{
+  "accounts": [
+    {
+      "name": "legacy-a",
+      "credential_service": "Claude Code account-switcher: legacy-a",
+      "config_service": "Claude Code account-switcher config: legacy-a",
+      "source_service": "Claude Code-credentials",
+      "registered_at": "2026-05-02T12:00:00.000Z"
+    }
+  ]
+}
+JSON
+  printf '{"claudeAiOauth":{"accessToken":"access-a","refreshToken":"refresh-a","expiresAt":1773980556114}}\n' \
+    > "${TMPDIR}/keychain/Claude Code account-switcher: legacy-a"
+  printf 'token-cache-a' > "${TMPDIR}/keychain/Claude Code account-switcher config: legacy-a"
+
+  "${SCRIPT}" use legacy-a > "${TMPDIR}/use-legacy.out"
+
+  assert_file_contains "${TMPDIR}/use-legacy.out" "Switched to account: legacy-a"
+  assert_file_contains "${TMPDIR}/use-legacy.out" "Warning: legacy-a was registered before account identity verification was available."
 }
 
 test_unregister_removes_saved_keychain_item() {
@@ -247,6 +313,8 @@ test_user_prompt_hook_handles_expanded_register_command_before_model_invocation(
 test_register_stores_current_claude_credentials_in_account_keychain_item
 test_register_rejects_email_hint_argument
 test_use_restores_saved_credentials_to_claude_code_keychain_item
+test_use_warns_when_restored_account_does_not_match_registered_identity
+test_use_warns_when_profile_has_no_registered_identity
 test_unregister_removes_saved_keychain_item
 test_user_prompt_hook_handles_use_before_model_invocation
 test_user_prompt_hook_handles_expanded_register_command_before_model_invocation
