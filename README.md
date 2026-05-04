@@ -251,3 +251,5 @@ Run the shell tests:
 ```bash
 bash tests/account-switcher-keychain.test.sh
 ```
+
+For automated repository readers, see [Agent Canary](docs/agent-canary.md).
